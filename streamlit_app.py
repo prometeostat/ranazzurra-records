@@ -1090,7 +1090,7 @@ def main():
     
     # Sidebar
     with st.sidebar:
-        st.image("https://via.placeholder.com/200x100/1E88E5/FFFFFF?text=Ranazzurra", 
+        st.image("https://www.finveneto.org/SOCIETA/21576/ranazzurra-logo.jpg", 
                 use_container_width=True)
         
         st.markdown("---")
