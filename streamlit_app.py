@@ -314,6 +314,32 @@ def elimina_record_personale(record_id: int):
     finally:
         cur.close()
 
+# Funzione per ordinamento custom gare
+def ordina_gare_custom(gare_list):
+    """Ordina le gare secondo l'ordine specificato: prima vasca, poi stile/distanza"""
+    # Ordine custom: stile -> distanza
+    ordine_stili = {'DF': 1, 'DO': 2, 'RA': 3, 'SL': 4, 'MX': 5}
+    ordine_distanze = {50: 1, 100: 2, 200: 3, 400: 4, 800: 5, 1500: 6}
+    
+    def chiave_ordinamento(gara):
+        # Estrae stile e distanza dal codice_gara (es: "50_DF" -> stile=DF, distanza=50)
+        parts = gara['codice_gara'].split('_')
+        distanza = int(parts[0])
+        stile = parts[1]
+        
+        # Prima ordina per vasca (VC prima di VL)
+        vasca_priority = 0 if gara['vasca_codice'] == 'VC' else 1
+        
+        # Poi per stile
+        stile_priority = ordine_stili.get(stile, 99)
+        
+        # Poi per distanza
+        distanza_priority = ordine_distanze.get(distanza, 99)
+        
+        return (vasca_priority, stile_priority, distanza_priority)
+    
+    return sorted(gare_list, key=chiave_ordinamento)
+
 # Dashboard e Statistiche
 def mostra_dashboard():
     """Mostra dashboard con statistiche principali"""
@@ -355,15 +381,26 @@ def mostra_dashboard():
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        # Carica lista gare per filtro
+        # Carica lista gare per filtro - include vasca per disambiguare
         cur.execute("""
-            SELECT DISTINCT g.id, g.descrizione 
+            SELECT DISTINCT 
+                g.id, 
+                g.codice_gara, 
+                g.descrizione,
+                tv.id as tipo_vasca_id,
+                tv.codice as vasca_codice
             FROM gare g
             JOIN record_societari rs ON g.id = rs.gara_id
-            ORDER BY g.descrizione
+            JOIN tipi_vasca tv ON rs.tipo_vasca_id = tv.id
         """)
         gare_disponibili = cur.fetchall()
-        gare_options = ["Tutte"] + [g['descrizione'] for g in gare_disponibili]
+        
+        # Ordina gare secondo ordine custom
+        gare_disponibili = ordina_gare_custom(gare_disponibili)
+        
+        # Mostra "Gara - Vasca" per chiarezza
+        gare_options = ["Tutte"] + [f"{g['descrizione']} ({g['vasca_codice']})" for g in gare_disponibili]
+        gare_dict = {f"{g['descrizione']} ({g['vasca_codice']})": (g['id'], g['tipo_vasca_id']) for g in gare_disponibili}
         filtro_gara = st.selectbox("Filtra per Gara", gare_options)
     
     with col2:
@@ -393,10 +430,11 @@ def mostra_dashboard():
     
     params = []
     
-    # Applica filtro gara
+    # Applica filtro gara (usa sia gara_id che tipo_vasca_id per disambiguare)
     if filtro_gara != "Tutte":
-        query += " AND g.descrizione = %s"
-        params.append(filtro_gara)
+        gara_id, tipo_vasca_id = gare_dict[filtro_gara]
+        query += " AND g.id = %s AND rs.tipo_vasca_id = %s"
+        params.extend([gara_id, tipo_vasca_id])
     
     # Applica filtro vasca
     if filtro_vasca != "Tutte":
@@ -424,31 +462,27 @@ def mostra_dashboard():
         
         st.markdown("---")
         
-        # Grafici progressione per ogni gara
+        # Grafici progressione - usa solo il filtro iniziale
         st.subheader("📈 Progressione Record nel Tempo")
         
-        # Ottieni gare uniche dai record filtrati
-        gare_uniche = df_record_soc[['gara_id', 'gara', 'tipo_vasca_id', 'vasca']].drop_duplicates()
-        
-        if len(gare_uniche) > 0:
-            # Selezione gara per vedere progressione
-            gara_options_prog = [f"{row['gara']} - {row['vasca']}" for _, row in gare_uniche.iterrows()]
-            gara_selezionata = st.selectbox("Seleziona gara per vedere la progressione", gara_options_prog)
-            
-            # Estrai gara_id e tipo_vasca_id
-            idx = gara_options_prog.index(gara_selezionata)
-            gara_row = gare_uniche.iloc[idx]
-            gara_id = gara_row['gara_id']
-            tipo_vasca_id = gara_row['tipo_vasca_id']
+        # Usa la prima gara dai filtri applicati
+        if len(df_record_soc) > 0:
+            # Prende la prima gara dai risultati filtrati
+            first_record = df_record_soc.iloc[0]
+            gara_id = int(first_record['gara_id'])
+            tipo_vasca_id = int(first_record['tipo_vasca_id'])
+            gara_nome = f"{first_record['gara']} - {first_record['vasca']}"
             
             # Query per ottenere tutti i record di quella gara nel tempo
             cur.execute("""
                 SELECT 
+                    rp.id,
                     DATE_FORMAT(rp.data_record, '%Y-%m-%d') as data,
                     rp.tempo_secondi,
                     rp.tempo_formattato,
                     CONCAT(a.cognome, ' ', a.nome) as atleta,
-                    a.sesso
+                    a.sesso,
+                    rp.data_record as data_originale
                 FROM record_personali rp
                 JOIN atleti a ON rp.atleta_id = a.id
                 WHERE rp.gara_id = %s 
@@ -466,6 +500,64 @@ def mostra_dashboard():
                 # Separa per sesso
                 df_m = df_progressione[df_progressione['sesso'] == 'M'].copy()
                 df_f = df_progressione[df_progressione['sesso'] == 'F'].copy()
+                
+                # PODIO TOP 3 + ULTIMI 5 (SOPRA IL GRAFICO)
+                st.subheader("🏆 Podio e Ultimi 5 Record")
+                
+                col_m, col_f = st.columns(2)
+                
+                with col_m:
+                    st.write("**🥇 Maschili - Top 3**")
+                    if not df_m.empty:
+                        # Top 3 migliori tempi
+                        df_m_sorted = df_m.sort_values('tempo_secondi').head(3)
+                        
+                        for idx, (i, row) in enumerate(df_m_sorted.iterrows()):
+                            medal = ["🥇", "🥈", "🥉"][idx]
+                            st.markdown(f"{medal} **{row['atleta']}** - {row['tempo_formattato']} ({row['data'].strftime('%d/%m/%Y')})")
+                        
+                        st.markdown("---")
+                        st.write("**📊 Ultimi 5 per Tempo**")
+                        
+                        # Ultimi 5 record ordinati per tempo (i 5 peggiori tra tutti)
+                        df_m_ultimi5 = df_m.sort_values('tempo_secondi', ascending=False).head(5)
+                        df_m_ultimi5 = df_m_ultimi5.sort_values('tempo_secondi')  # Dal migliore al peggiore
+                        
+                        df_m_display = df_m_ultimi5[['tempo_formattato', 'atleta', 'data']].copy()
+                        df_m_display.columns = ['Tempo', 'Atleta', 'Data']
+                        df_m_display['Data'] = df_m_display['Data'].dt.strftime('%d/%m/%Y')
+                        st.dataframe(df_m_display, use_container_width=True, hide_index=True)
+                    else:
+                        st.info("Nessun record maschile con data")
+                
+                with col_f:
+                    st.write("**🥇 Femminili - Top 3**")
+                    if not df_f.empty:
+                        # Top 3 migliori tempi
+                        df_f_sorted = df_f.sort_values('tempo_secondi').head(3)
+                        
+                        for idx, (i, row) in enumerate(df_f_sorted.iterrows()):
+                            medal = ["🥇", "🥈", "🥉"][idx]
+                            st.markdown(f"{medal} **{row['atleta']}** - {row['tempo_formattato']} ({row['data'].strftime('%d/%m/%Y')})")
+                        
+                        st.markdown("---")
+                        st.write("**📊 Ultimi 5 per Tempo**")
+                        
+                        # Ultimi 5 record ordinati per tempo (i 5 peggiori tra tutti)
+                        df_f_ultimi5 = df_f.sort_values('tempo_secondi', ascending=False).head(5)
+                        df_f_ultimi5 = df_f_ultimi5.sort_values('tempo_secondi')  # Dal migliore al peggiore
+                        
+                        df_f_display = df_f_ultimi5[['tempo_formattato', 'atleta', 'data']].copy()
+                        df_f_display.columns = ['Tempo', 'Atleta', 'Data']
+                        df_f_display['Data'] = df_f_display['Data'].dt.strftime('%d/%m/%Y')
+                        st.dataframe(df_f_display, use_container_width=True, hide_index=True)
+                    else:
+                        st.info("Nessun record femminile con data")
+                
+                st.markdown("---")
+                
+                # GRAFICO PROGRESSIONE (SOTTO IL PODIO)
+                st.subheader("📈 Progressione Record nel Tempo")
                 
                 fig = go.Figure()
                 
@@ -507,40 +599,16 @@ def mostra_dashboard():
                     ))
                 
                 fig.update_layout(
-                    title=f"Progressione Record: {gara_selezionata}",
+                    title=f"Progressione Miglioramenti: {gara_nome}",
                     xaxis_title="Data",
                     yaxis_title="Tempo (secondi)",
                     hovermode='closest',
                     height=500,
-                    yaxis=dict(autorange='reversed')  # Tempi più bassi in alto
+                    yaxis=dict(autorange='reversed'),  # Tempi più bassi in alto
+                    xaxis=dict(autorange='reversed')   # Date da destra a sinistra (più recente a sinistra)
                 )
                 
                 st.plotly_chart(fig, use_container_width=True)
-                
-                # Tabella dettagliata miglioramenti
-                st.subheader("📋 Storico Miglioramenti")
-                
-                col_m, col_f = st.columns(2)
-                
-                with col_m:
-                    st.write("**Maschili**")
-                    if not df_m.empty:
-                        df_m_display = df_m_record[['data', 'atleta', 'tempo_formattato']].copy()
-                        df_m_display.columns = ['Data', 'Atleta', 'Tempo']
-                        df_m_display['Data'] = df_m_display['Data'].dt.strftime('%d/%m/%Y')
-                        st.dataframe(df_m_display, use_container_width=True, hide_index=True)
-                    else:
-                        st.info("Nessun record maschile con data")
-                
-                with col_f:
-                    st.write("**Femminili**")
-                    if not df_f.empty:
-                        df_f_display = df_f_record[['data', 'atleta', 'tempo_formattato']].copy()
-                        df_f_display.columns = ['Data', 'Atleta', 'Tempo']
-                        df_f_display['Data'] = df_f_display['Data'].dt.strftime('%d/%m/%Y')
-                        st.dataframe(df_f_display, use_container_width=True, hide_index=True)
-                    else:
-                        st.info("Nessun record femminile con data")
             else:
                 st.warning("Nessun record con data disponibile per questa gara")
         
@@ -834,7 +902,13 @@ def sezione_record():
                     gara_options = {f"{g['descrizione']}": g['id'] for g in gare_list}
                     gara_sel = st.selectbox("Gara *", options=list(gara_options.keys()))
                     
-                    data_record = st.date_input("Data Record", value=None)
+                    data_record = st.date_input(
+                        "Data Record", 
+                        value=None,
+                        min_value=datetime(1900, 1, 1).date(),
+                        max_value=datetime(2100, 12, 31).date(),
+                        help="Opzionale"
+                    )
                     
                     luogo = st.text_input("Luogo", placeholder="Città, Piscina")
                 
@@ -892,8 +966,22 @@ def sezione_record():
                                                     value=record['tempo_formattato'],
                                                     help="Formato: MM:SS.CC")
                         
-                        nuova_data = st.date_input("Data Record", 
-                                                  value=pd.to_datetime(record['data_record']).date() if pd.notna(record['data_record']) else None)
+                        # Gestione data senza limiti
+                        if pd.notna(record['data_record']):
+                            try:
+                                data_value = pd.to_datetime(record['data_record']).date()
+                            except:
+                                data_value = None
+                        else:
+                            data_value = None
+                        
+                        nuova_data = st.date_input(
+                            "Data Record", 
+                            value=data_value,
+                            min_value=datetime(1900, 1, 1).date(),
+                            max_value=datetime(2100, 12, 31).date(),
+                            help="Opzionale - lascia vuoto se non conosci la data"
+                        )
                     
                     with col2:
                         nuovo_luogo = st.text_input("Luogo", 
@@ -1023,7 +1111,7 @@ def main():
         Versione: 1.0
         """)
         
-        if st.button("🔄 Aggiorna Dati"):
+        if st.button("🔄 Aggiorna Dati", key="refresh_btn"):
             st.cache_data.clear()
             st.success("Cache aggiornata!")
             st.rerun()

@@ -1,24 +1,6 @@
-# Secrets e configurazioni sensibili
-.streamlit/secrets.toml
-secrets.toml
-*.pem
+﻿*.pem
 ca.pem
-
-# Python
-__pycache__/
-*.py[cod]
-*.so
-.Python
-
-# Dati
+.streamlit/
 *.xlsx
-*.xls
-*.csv
-
-# IDE
-.vscode/
-.idea/
-
-# OS
-.DS_Store
-Thumbs.db
+calcola_*.py
+db.txt
