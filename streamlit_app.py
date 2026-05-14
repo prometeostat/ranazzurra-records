@@ -72,10 +72,8 @@ def init_connection():
             user=st.secrets["mysql"]["user"],
             password=st.secrets["mysql"]["password"],
             ssl_ca=st.secrets["mysql"].get("ssl_ca", None),
-            ssl_disabled=False,
-            autocommit=True,
-            pool_reset_session=True,
-            pool_size=5
+            ssl_disabled=False
+            autocommit=True
         )
     except Exception as e:
         st.error(f"Errore connessione database: {e}")
