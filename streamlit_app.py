@@ -72,15 +72,30 @@ def init_connection():
             user=st.secrets["mysql"]["user"],
             password=st.secrets["mysql"]["password"],
             ssl_ca=st.secrets["mysql"].get("ssl_ca", None),
-            ssl_disabled=False
+            ssl_disabled=False,
+            autocommit=True,
+            pool_reset_session=True,
+            pool_size=5
         )
     except Exception as e:
         st.error(f"Errore connessione database: {e}")
         st.stop()
 
 def get_db_cursor():
-    """Ottiene un cursor per il database"""
+    """Ottiene un cursor per il database, ricreando la connessione se necessario"""
     conn = init_connection()
+    
+    # Verifica se la connessione è ancora attiva
+    try:
+        if not conn.is_connected():
+            # Connessione persa, invalida la cache e ricrea
+            st.cache_resource.clear()
+            conn = init_connection()
+    except (AttributeError, Error):
+        # Se c'è un errore nella verifica, ricrea la connessione
+        st.cache_resource.clear()
+        conn = init_connection()
+    
     return conn.cursor(dictionary=True)
 
 # Utility functions
@@ -345,8 +360,7 @@ def mostra_dashboard():
     """Mostra dashboard con statistiche principali"""
     st.markdown('<div class="main-header">🏊 Ranazzurra Conegliano - Records Manager</div>', unsafe_allow_html=True)
     
-    conn = init_connection()
-    cur = conn.cursor(dictionary=True)
+    cur = get_db_cursor()
     
     # Statistiche principali
     col1, col2, col3, col4 = st.columns(4)
