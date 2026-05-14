@@ -72,15 +72,28 @@ def init_connection():
             user=st.secrets["mysql"]["user"],
             password=st.secrets["mysql"]["password"],
             ssl_ca=st.secrets["mysql"].get("ssl_ca", None),
-            ssl_disabled=False
+            ssl_disabled=False,
+            autocommit=True
         )
     except Exception as e:
         st.error(f"Errore connessione database: {e}")
         st.stop()
 
 def get_db_cursor():
-    """Ottiene un cursor per il database"""
+    """Ottiene un cursor per il database, ricreando la connessione se necessario"""
     conn = init_connection()
+    
+    # Verifica se la connessione è ancora attiva
+    try:
+        if not conn.is_connected():
+            # Connessione persa, invalida la cache e ricrea
+            st.cache_resource.clear()
+            conn = init_connection()
+    except (AttributeError, Error):
+        # Se c'è un errore nella verifica, ricrea la connessione
+        st.cache_resource.clear()
+        conn = init_connection()
+    
     return conn.cursor(dictionary=True)
 
 # Utility functions
@@ -345,8 +358,7 @@ def mostra_dashboard():
     """Mostra dashboard con statistiche principali"""
     st.markdown('<div class="main-header">🏊 Ranazzurra Conegliano - Records Manager</div>', unsafe_allow_html=True)
     
-    conn = init_connection()
-    cur = conn.cursor(dictionary=True)
+    cur = get_db_cursor()
     
     # Statistiche principali
     col1, col2, col3, col4 = st.columns(4)
@@ -377,44 +389,34 @@ def mostra_dashboard():
     # Record societari con filtri
     st.subheader("🏆 Record Societari")
     
-    # Filtri - PRIMA VASCA, POI GARA
+    # Filtri
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        filtro_vasca = st.selectbox("Filtra per Vasca", ["Tutte", "Vasca Corta (25m)", "Vasca Lunga (50m)"])
-    
-    with col2:
-        # Carica lista gare filtrate per vasca selezionata
-        if filtro_vasca == "Tutte":
-            cur.execute("""
-                SELECT DISTINCT 
-                    g.id, 
-                    g.codice_gara, 
-                    g.descrizione
-                FROM gare g
-                JOIN record_societari rs ON g.id = rs.gara_id
-            """)
-        else:
-            cur.execute("""
-                SELECT DISTINCT 
-                    g.id, 
-                    g.codice_gara, 
-                    g.descrizione
-                FROM gare g
-                JOIN record_societari rs ON g.id = rs.gara_id
-                JOIN tipi_vasca tv ON rs.tipo_vasca_id = tv.id
-                WHERE tv.descrizione = %s
-            """, (filtro_vasca,))
-        
+        # Carica lista gare per filtro - include vasca per disambiguare
+        cur.execute("""
+            SELECT DISTINCT 
+                g.id, 
+                g.codice_gara, 
+                g.descrizione,
+                tv.id as tipo_vasca_id,
+                tv.codice as vasca_codice
+            FROM gare g
+            JOIN record_societari rs ON g.id = rs.gara_id
+            JOIN tipi_vasca tv ON rs.tipo_vasca_id = tv.id
+        """)
         gare_disponibili = cur.fetchall()
         
         # Ordina gare secondo ordine custom
         gare_disponibili = ordina_gare_custom(gare_disponibili)
         
-        # Mostra solo il nome della gara (non ripetere VC/VL)
-        gare_options = ["Tutte"] + [g['descrizione'] for g in gare_disponibili]
-        gare_dict = {g['descrizione']: g['id'] for g in gare_disponibili}
+        # Mostra "Gara - Vasca" per chiarezza
+        gare_options = ["Tutte"] + [f"{g['descrizione']} ({g['vasca_codice']})" for g in gare_disponibili]
+        gare_dict = {f"{g['descrizione']} ({g['vasca_codice']})": (g['id'], g['tipo_vasca_id']) for g in gare_disponibili}
         filtro_gara = st.selectbox("Filtra per Gara", gare_options)
+    
+    with col2:
+        filtro_vasca = st.selectbox("Filtra per Vasca", ["Tutte", "Vasca Corta (25m)", "Vasca Lunga (50m)"])
     
     with col3:
         filtro_categoria = st.selectbox("Categoria", ["Tutti", "Maschili", "Femminili", "Assoluti"])
@@ -440,16 +442,16 @@ def mostra_dashboard():
     
     params = []
     
-    # Applica filtro vasca PRIMA
+    # Applica filtro gara (usa sia gara_id che tipo_vasca_id per disambiguare)
+    if filtro_gara != "Tutte":
+        gara_id, tipo_vasca_id = gare_dict[filtro_gara]
+        query += " AND g.id = %s AND rs.tipo_vasca_id = %s"
+        params.extend([gara_id, tipo_vasca_id])
+    
+    # Applica filtro vasca
     if filtro_vasca != "Tutte":
         query += " AND tv.descrizione = %s"
         params.append(filtro_vasca)
-    
-    # Applica filtro gara (solo gara_id, vasca già filtrata sopra)
-    if filtro_gara != "Tutte":
-        gara_id = gare_dict[filtro_gara]
-        query += " AND g.id = %s"
-        params.append(gara_id)
     
     # Applica filtro categoria
     if filtro_categoria == "Maschili":
@@ -1100,6 +1102,11 @@ def main():
     
     # Sidebar
     with st.sidebar:
+        st.image("https://www.finveneto.org/SOCIETA/21576/ranazzurra-logo.jpg", 
+                use_container_width=True)
+        
+        st.markdown("---")
+        
         menu = st.radio(
             "🧭 Menu Navigazione",
             ["🏠 Dashboard", "👤 Gestione Atleti", "🏅 Gestione Record"],
