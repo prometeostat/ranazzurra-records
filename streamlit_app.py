@@ -72,7 +72,7 @@ def init_connection():
             user=st.secrets["mysql"]["user"],
             password=st.secrets["mysql"]["password"],
             ssl_ca=st.secrets["mysql"].get("ssl_ca", None),
-            ssl_disabled=False
+            ssl_disabled=False,
             autocommit=True
         )
     except Exception as e:
