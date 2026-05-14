@@ -389,34 +389,47 @@ def mostra_dashboard():
     # Record societari con filtri
     st.subheader("🏆 Record Societari")
     
-    # Filtri
+    # Filtri - PRIMA VASCA, POI GARA filtrata
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        # Carica lista gare per filtro - include vasca per disambiguare
-        cur.execute("""
-            SELECT DISTINCT 
-                g.id, 
-                g.codice_gara, 
-                g.descrizione,
-                tv.id as tipo_vasca_id,
-                tv.codice as vasca_codice
-            FROM gare g
-            JOIN record_societari rs ON g.id = rs.gara_id
-            JOIN tipi_vasca tv ON rs.tipo_vasca_id = tv.id
-        """)
+        filtro_vasca = st.selectbox("Filtra per Vasca", ["Tutte", "Vasca Corta (25m)", "Vasca Lunga (50m)"])
+    
+    with col2:
+        # Carica lista gare filtrate per vasca selezionata
+        if filtro_vasca == "Tutte":
+            cur.execute("""
+                SELECT DISTINCT 
+                    g.id, 
+                    g.codice_gara, 
+                    g.descrizione,
+                    tv.codice as vasca_codice
+                FROM gare g
+                JOIN record_societari rs ON g.id = rs.gara_id
+                JOIN tipi_vasca tv ON rs.tipo_vasca_id = tv.id
+            """)
+        else:
+            cur.execute("""
+                SELECT DISTINCT 
+                    g.id, 
+                    g.codice_gara, 
+                    g.descrizione,
+                    tv.codice as vasca_codice
+                FROM gare g
+                JOIN record_societari rs ON g.id = rs.gara_id
+                JOIN tipi_vasca tv ON rs.tipo_vasca_id = tv.id
+                WHERE tv.descrizione = %s
+            """, (filtro_vasca,))
+        
         gare_disponibili = cur.fetchall()
         
         # Ordina gare secondo ordine custom
         gare_disponibili = ordina_gare_custom(gare_disponibili)
         
-        # Mostra "Gara - Vasca" per chiarezza
-        gare_options = ["Tutte"] + [f"{g['descrizione']} ({g['vasca_codice']})" for g in gare_disponibili]
-        gare_dict = {f"{g['descrizione']} ({g['vasca_codice']})": (g['id'], g['tipo_vasca_id']) for g in gare_disponibili}
+        # Mostra solo la descrizione della gara (senza ripetere VC/VL)
+        gare_options = ["Tutte"] + [g['descrizione'] for g in gare_disponibili]
+        gare_dict = {g['descrizione']: g['id'] for g in gare_disponibili}
         filtro_gara = st.selectbox("Filtra per Gara", gare_options)
-    
-    with col2:
-        filtro_vasca = st.selectbox("Filtra per Vasca", ["Tutte", "Vasca Corta (25m)", "Vasca Lunga (50m)"])
     
     with col3:
         filtro_categoria = st.selectbox("Categoria", ["Tutti", "Maschili", "Femminili", "Assoluti"])
@@ -442,16 +455,16 @@ def mostra_dashboard():
     
     params = []
     
-    # Applica filtro gara (usa sia gara_id che tipo_vasca_id per disambiguare)
-    if filtro_gara != "Tutte":
-        gara_id, tipo_vasca_id = gare_dict[filtro_gara]
-        query += " AND g.id = %s AND rs.tipo_vasca_id = %s"
-        params.extend([gara_id, tipo_vasca_id])
-    
-    # Applica filtro vasca
+    # Applica filtro vasca PRIMA
     if filtro_vasca != "Tutte":
         query += " AND tv.descrizione = %s"
         params.append(filtro_vasca)
+    
+    # Applica filtro gara (solo gara_id, la vasca è già filtrata sopra)
+    if filtro_gara != "Tutte":
+        gara_id = gare_dict[filtro_gara]
+        query += " AND g.id = %s"
+        params.append(gara_id)
     
     # Applica filtro categoria
     if filtro_categoria == "Maschili":
@@ -1102,11 +1115,6 @@ def main():
     
     # Sidebar
     with st.sidebar:
-        st.image("https://www.finveneto.org/SOCIETA/21576/ranazzurra-logo.jpg", 
-                use_container_width=True)
-        
-        st.markdown("---")
-        
         menu = st.radio(
             "🧭 Menu Navigazione",
             ["🏠 Dashboard", "👤 Gestione Atleti", "🏅 Gestione Record"],
