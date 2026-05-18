@@ -152,8 +152,8 @@ def carica_record_top3() -> Dict[str, Dict[str, pd.DataFrame]]:
     query = """
     SELECT 
         g.descrizione AS gara,
-        g.distanza,
-        g.stile,
+        d.metri AS distanza,
+        sn.codice AS stile,
         rp.tipo_vasca,
         a.cognome,
         a.nome,
@@ -167,8 +167,10 @@ def carica_record_top3() -> Dict[str, Dict[str, pd.DataFrame]]:
     FROM record_personali rp
     JOIN atleti a ON rp.atleta_id = a.id
     JOIN gare g ON rp.gara_id = g.id
+    JOIN stili_nuoto sn ON g.stile_id = sn.id
+    JOIN distanze d ON g.distanza_id = d.id
     WHERE rp.tempo_secondi IS NOT NULL
-    ORDER BY g.distanza, g.stile, rp.tipo_vasca, posizione
+    ORDER BY d.metri, sn.codice, rp.tipo_vasca, posizione
     """
     
     cur.execute(query)
