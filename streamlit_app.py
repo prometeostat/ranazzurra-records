@@ -5,7 +5,8 @@ Ranazzurra S.r.l.
 Gestione CRUD completa per atleti, record personali e record societari
 Database: MySQL su AIVEN
 """
-
+import os
+os.environ['MALLOC_CHECK_'] = '0'  # Disabilita check strict malloc
 import streamlit as st
 import pandas as pd
 import mysql.connector
@@ -140,6 +141,64 @@ def formatta_tempo(secondi: float) -> str:
         return f"{ore}:{minuti:02d}:{sec:05.2f}"
     else:
         return f"{minuti}:{sec:05.2f}"
+
+# CRUD Operations - RECORD TOP 3
+@st.cache_data(ttl=60)
+def carica_record_top3() -> Dict[str, Dict[str, pd.DataFrame]]:
+    """Carica i top 3 record per ogni gara, divisi per vasca lunga e corta"""
+    conn = init_connection()
+    cur = conn.cursor(dictionary=True)
+    
+    query = """
+    SELECT 
+        g.descrizione AS gara,
+        g.distanza,
+        g.stile,
+        rp.tipo_vasca,
+        a.cognome,
+        a.nome,
+        a.anno_nascita,
+        rp.tempo_formattato,
+        rp.tempo_secondi,
+        rp.data_record,
+        rp.luogo,
+        rp.manifestazione,
+        ROW_NUMBER() OVER (PARTITION BY g.id, rp.tipo_vasca ORDER BY rp.tempo_secondi ASC) AS posizione
+    FROM record_personali rp
+    JOIN atleti a ON rp.atleta_id = a.id
+    JOIN gare g ON rp.gara_id = g.id
+    WHERE rp.tempo_secondi IS NOT NULL
+    ORDER BY g.distanza, g.stile, rp.tipo_vasca, posizione
+    """
+    
+    cur.execute(query)
+    results = cur.fetchall()
+    cur.close()
+    
+    df_all = pd.DataFrame(results)
+    
+    # Filtra solo i top 3
+    df_top3 = df_all[df_all['posizione'] <= 3].copy()
+    
+    # Dividi per tipo vasca
+    record_dict = {
+        'Vasca Lunga (50m)': {},
+        'Vasca Corta (25m)': {}
+    }
+    
+    for vasca_tipo in ['50m', '25m']:
+        df_vasca = df_top3[df_top3['tipo_vasca'] == vasca_tipo].copy()
+        
+        # Raggruppa per gara
+        for gara in df_vasca['gara'].unique():
+            df_gara = df_vasca[df_vasca['gara'] == gara].copy()
+            df_gara = df_gara[['posizione', 'cognome', 'nome', 'anno_nascita', 
+                              'tempo_formattato', 'data_record', 'luogo', 'manifestazione']]
+            
+            key = 'Vasca Lunga (50m)' if vasca_tipo == '50m' else 'Vasca Corta (25m)'
+            record_dict[key][gara] = df_gara
+    
+    return record_dict
 
 # CRUD Operations - ATLETI
 @st.cache_data(ttl=60)
@@ -1109,6 +1168,127 @@ def sezione_record():
         else:
             st.info("Nessun record disponibile per eliminazione")
 
+# Sezione Record Top 3
+def sezione_record_top3():
+    """Visualizza i top 3 record per ogni gara"""
+    st.markdown('<div class="main-header">🏆 Record Societari Top 3</div>', unsafe_allow_html=True)
+    
+    st.info("📊 **Classifica dei migliori 3 tempi** per ciascuna delle 18 gare, suddivisi tra Vasca Lunga (50m) e Vasca Corta (25m)")
+    
+    try:
+        record_dict = carica_record_top3()
+        
+        # Tab per vasca lunga e vasca corta
+        tab1, tab2 = st.tabs(["🏊 Vasca Lunga (50m)", "🏊 Vasca Corta (25m)"])
+        
+        with tab1:
+            st.markdown("### Vasca Lunga (50m)")
+            records_50 = record_dict['Vasca Lunga (50m)']
+            
+            if not records_50:
+                st.warning("Nessun record disponibile per vasca lunga")
+            else:
+                # Ordina le gare per distanza e stile
+                gare_ordinate = sorted(records_50.keys(), 
+                                      key=lambda x: (int(x.split()[0].replace('m', '')), x))
+                
+                # Crea una griglia 2 colonne
+                for i in range(0, len(gare_ordinate), 2):
+                    cols = st.columns(2)
+                    
+                    for j, col in enumerate(cols):
+                        if i + j < len(gare_ordinate):
+                            gara = gare_ordinate[i + j]
+                            df = records_50[gara]
+                            
+                            with col:
+                                st.markdown(f"#### {gara}")
+                                
+                                if df.empty:
+                                    st.info("Nessun record disponibile")
+                                else:
+                                    for idx, row in df.iterrows():
+                                        pos_emoji = {1: "🥇", 2: "🥈", 3: "🥉"}
+                                        emoji = pos_emoji.get(int(row['posizione']), "")
+                                        
+                                        data_str = ""
+                                        if pd.notna(row['data_record']):
+                                            try:
+                                                data_obj = pd.to_datetime(row['data_record'])
+                                                data_str = f" - {data_obj.strftime('%d/%m/%Y')}"
+                                            except:
+                                                pass
+                                        
+                                        luogo_str = ""
+                                        if pd.notna(row['luogo']) and row['luogo'].strip():
+                                            luogo_str = f"<br/>📍 {row['luogo']}"
+                                        
+                                        anno_str = f" ({row['anno_nascita']})" if pd.notna(row['anno_nascita']) else ""
+                                        
+                                        st.markdown(f"""
+                                        <div style="background-color: #f8f9fa; padding: 0.8rem; border-radius: 0.5rem; margin-bottom: 0.8rem; border-left: 4px solid {'#FFD700' if row['posizione']==1 else '#C0C0C0' if row['posizione']==2 else '#CD7F32'};">
+                                            <strong>{emoji} {row['tempo_formattato']}</strong> - {row['cognome']} {row['nome']}{anno_str}{data_str}{luogo_str}
+                                        </div>
+                                        """, unsafe_allow_html=True)
+                                
+                                st.markdown("---")
+        
+        with tab2:
+            st.markdown("### Vasca Corta (25m)")
+            records_25 = record_dict['Vasca Corta (25m)']
+            
+            if not records_25:
+                st.warning("Nessun record disponibile per vasca corta")
+            else:
+                # Ordina le gare per distanza e stile
+                gare_ordinate = sorted(records_25.keys(), 
+                                      key=lambda x: (int(x.split()[0].replace('m', '')), x))
+                
+                # Crea una griglia 2 colonne
+                for i in range(0, len(gare_ordinate), 2):
+                    cols = st.columns(2)
+                    
+                    for j, col in enumerate(cols):
+                        if i + j < len(gare_ordinate):
+                            gara = gare_ordinate[i + j]
+                            df = records_25[gara]
+                            
+                            with col:
+                                st.markdown(f"#### {gara}")
+                                
+                                if df.empty:
+                                    st.info("Nessun record disponibile")
+                                else:
+                                    for idx, row in df.iterrows():
+                                        pos_emoji = {1: "🥇", 2: "🥈", 3: "🥉"}
+                                        emoji = pos_emoji.get(int(row['posizione']), "")
+                                        
+                                        data_str = ""
+                                        if pd.notna(row['data_record']):
+                                            try:
+                                                data_obj = pd.to_datetime(row['data_record'])
+                                                data_str = f" - {data_obj.strftime('%d/%m/%Y')}"
+                                            except:
+                                                pass
+                                        
+                                        luogo_str = ""
+                                        if pd.notna(row['luogo']) and row['luogo'].strip():
+                                            luogo_str = f"<br/>📍 {row['luogo']}"
+                                        
+                                        anno_str = f" ({row['anno_nascita']})" if pd.notna(row['anno_nascita']) else ""
+                                        
+                                        st.markdown(f"""
+                                        <div style="background-color: #f8f9fa; padding: 0.8rem; border-radius: 0.5rem; margin-bottom: 0.8rem; border-left: 4px solid {'#FFD700' if row['posizione']==1 else '#C0C0C0' if row['posizione']==2 else '#CD7F32'};">
+                                            <strong>{emoji} {row['tempo_formattato']}</strong> - {row['cognome']} {row['nome']}{anno_str}{data_str}{luogo_str}
+                                        </div>
+                                        """, unsafe_allow_html=True)
+                                
+                                st.markdown("---")
+    
+    except Exception as e:
+        st.error(f"❌ Errore nel caricamento dei record: {str(e)}")
+        st.exception(e)
+
 # Main App
 def main():
     """Funzione principale dell'applicazione"""
@@ -1117,7 +1297,7 @@ def main():
     with st.sidebar:
         menu = st.radio(
             "🧭 Menu Navigazione",
-            ["🏠 Dashboard", "👤 Gestione Atleti", "🏅 Gestione Record"],
+            ["🏠 Dashboard", "🏆 Record Top 3", "👤 Gestione Atleti", "🏅 Gestione Record"],
             key="menu_nav"
         )
         
@@ -1139,6 +1319,8 @@ def main():
     # Routing
     if menu == "🏠 Dashboard":
         mostra_dashboard()
+    elif menu == "🏆 Record Top 3":
+        sezione_record_top3()
     elif menu == "👤 Gestione Atleti":
         sezione_atleti()
     elif menu == "🏅 Gestione Record":
