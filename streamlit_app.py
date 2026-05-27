@@ -169,6 +169,7 @@ def carica_record_top3() -> Dict[str, Dict[str, pd.DataFrame]]:
         sn.codice AS stile,
         tv.codice AS tipo_vasca,
         tv.descrizione AS vasca_descrizione,
+        a.sesso,
         a.cognome,
         a.nome,
         a.anno_nascita,
@@ -177,7 +178,10 @@ def carica_record_top3() -> Dict[str, Dict[str, pd.DataFrame]]:
         rp.data_record,
         rp.luogo,
         rp.manifestazione,
-        ROW_NUMBER() OVER (PARTITION BY g.id, rp.tipo_vasca_id ORDER BY rp.tempo_secondi ASC) AS posizione
+        ROW_NUMBER() OVER (
+            PARTITION BY g.id, rp.tipo_vasca_id, a.sesso
+            ORDER BY rp.tempo_secondi ASC
+        ) AS posizione
     FROM record_personali rp
     JOIN atleti a ON rp.atleta_id = a.id
     JOIN gare g ON rp.gara_id = g.id
@@ -185,7 +189,8 @@ def carica_record_top3() -> Dict[str, Dict[str, pd.DataFrame]]:
     JOIN distanze d ON g.distanza_id = d.id
     JOIN tipi_vasca tv ON rp.tipo_vasca_id = tv.id
     WHERE rp.tempo_secondi IS NOT NULL
-    ORDER BY d.metri, sn.codice, tv.codice, posizione
+      AND a.sesso IN ('M', 'F')
+    ORDER BY d.metri, sn.codice, tv.codice, a.sesso, posizione
     """
     
     cur.execute(query)
@@ -196,27 +201,27 @@ def carica_record_top3() -> Dict[str, Dict[str, pd.DataFrame]]:
         return {'Vasca Lunga (50m)': {}, 'Vasca Corta (25m)': {}}
     
     df_all = pd.DataFrame(results)
-    
-    # Filtra solo i top 3
     df_top3 = df_all[df_all['posizione'] <= 3].copy()
     
+    # Struttura: { 'Vasca Lunga (50m)': { 'nome_gara': {'M': df, 'F': df} } }
     record_dict = {
         'Vasca Lunga (50m)': {},
         'Vasca Corta (25m)': {}
     }
     
-    # Mappa codice vasca -> chiave dizionario
     vasca_map = {'VL': 'Vasca Lunga (50m)', 'VC': 'Vasca Corta (25m)'}
+    cols_display = ['posizione', 'cognome', 'nome', 'anno_nascita',
+                    'tempo_formattato', 'data_record', 'luogo', 'manifestazione']
     
     for codice_vasca, chiave in vasca_map.items():
         df_vasca = df_top3[df_top3['tipo_vasca'] == codice_vasca].copy()
         
         for gara in df_vasca['gara'].unique():
-            df_gara = df_vasca[df_vasca['gara'] == gara][
-                ['posizione', 'cognome', 'nome', 'anno_nascita',
-                 'tempo_formattato', 'data_record', 'luogo', 'manifestazione']
-            ].copy()
-            record_dict[chiave][gara] = df_gara
+            df_gara = df_vasca[df_vasca['gara'] == gara]
+            record_dict[chiave][gara] = {
+                'M': df_gara[df_gara['sesso'] == 'M'][cols_display].copy(),
+                'F': df_gara[df_gara['sesso'] == 'F'][cols_display].copy()
+            }
     
     return record_dict
 
@@ -1249,29 +1254,32 @@ def sezione_record_top3():
             if not records_50:
                 st.warning("Nessun record disponibile per vasca lunga")
             else:
-                # Ordina le gare per distanza e stile
-                gare_ordinate = sorted(records_50.keys(), 
-                                      key=lambda x: (int(x.split()[0].replace('m', '')), x))
+                gare_ordinate = sorted(records_50.keys(),
+                                       key=lambda x: (int(x.split()[0].replace('m', '')), x))
                 
-                # Crea una griglia 2 colonne
-                for i in range(0, len(gare_ordinate), 2):
-                    cols = st.columns(2)
+                for gara in gare_ordinate:
+                    st.markdown(f"#### {gara}")
+                    col_m, col_f = st.columns(2)
                     
-                    for j, col in enumerate(cols):
-                        if i + j < len(gare_ordinate):
-                            gara = gare_ordinate[i + j]
-                            df = records_50[gara]
-                            
-                            with col:
-                                st.markdown(f"#### {gara}")
-                                
-                                if df.empty:
-                                    st.info("Nessun record disponibile")
-                                else:
-                                    for idx, row in df.iterrows():
-                                        st.markdown(render_record_card(row), unsafe_allow_html=True)
-                                
-                                st.markdown("---")
+                    with col_m:
+                        st.markdown("**🔵 Maschile**")
+                        df_m = records_50[gara]['M']
+                        if df_m.empty:
+                            st.info("Nessun record maschile")
+                        else:
+                            for _, row in df_m.iterrows():
+                                st.markdown(render_record_card(row), unsafe_allow_html=True)
+                    
+                    with col_f:
+                        st.markdown("**🔴 Femminile**")
+                        df_f = records_50[gara]['F']
+                        if df_f.empty:
+                            st.info("Nessun record femminile")
+                        else:
+                            for _, row in df_f.iterrows():
+                                st.markdown(render_record_card(row), unsafe_allow_html=True)
+                    
+                    st.markdown("---")
         
         with tab2:
             st.markdown("### Vasca Corta (25m)")
@@ -1280,29 +1288,32 @@ def sezione_record_top3():
             if not records_25:
                 st.warning("Nessun record disponibile per vasca corta")
             else:
-                # Ordina le gare per distanza e stile
-                gare_ordinate = sorted(records_25.keys(), 
-                                      key=lambda x: (int(x.split()[0].replace('m', '')), x))
+                gare_ordinate = sorted(records_25.keys(),
+                                       key=lambda x: (int(x.split()[0].replace('m', '')), x))
                 
-                # Crea una griglia 2 colonne
-                for i in range(0, len(gare_ordinate), 2):
-                    cols = st.columns(2)
+                for gara in gare_ordinate:
+                    st.markdown(f"#### {gara}")
+                    col_m, col_f = st.columns(2)
                     
-                    for j, col in enumerate(cols):
-                        if i + j < len(gare_ordinate):
-                            gara = gare_ordinate[i + j]
-                            df = records_25[gara]
-                            
-                            with col:
-                                st.markdown(f"#### {gara}")
-                                
-                                if df.empty:
-                                    st.info("Nessun record disponibile")
-                                else:
-                                    for idx, row in df.iterrows():
-                                        st.markdown(render_record_card(row), unsafe_allow_html=True)
-                                
-                                st.markdown("---")
+                    with col_m:
+                        st.markdown("**🔵 Maschile**")
+                        df_m = records_25[gara]['M']
+                        if df_m.empty:
+                            st.info("Nessun record maschile")
+                        else:
+                            for _, row in df_m.iterrows():
+                                st.markdown(render_record_card(row), unsafe_allow_html=True)
+                    
+                    with col_f:
+                        st.markdown("**🔴 Femminile**")
+                        df_f = records_25[gara]['F']
+                        if df_f.empty:
+                            st.info("Nessun record femminile")
+                        else:
+                            for _, row in df_f.iterrows():
+                                st.markdown(render_record_card(row), unsafe_allow_html=True)
+                    
+                    st.markdown("---")
     
     except Exception as e:
         st.error(f"❌ Errore nel caricamento dei record: {str(e)}")
