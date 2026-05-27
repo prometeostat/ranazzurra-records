@@ -58,6 +58,19 @@ st.markdown("""
     div[data-testid="stMetricValue"] {
         font-size: 2rem;
     }
+    .record-card {
+        background-color: #1e2a3a !important;
+        color: #f0f0f0 !important;
+        padding: 0.8rem;
+        border-radius: 0.5rem;
+        margin-bottom: 0.8rem;
+    }
+    .record-card strong {
+        color: #ffffff !important;
+    }
+    .record-card span {
+        color: #cccccc !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -1176,6 +1189,47 @@ def sezione_record():
             st.info("Nessun record disponibile per eliminazione")
 
 # Sezione Record Top 3
+def render_record_card(row) -> str:
+    """Genera HTML card per un record, compatibile con dark/light mode"""
+    pos_emoji = {1: "🥇", 2: "🥈", 3: "🥉"}
+    border_colors = {1: "#FFD700", 2: "#C0C0C0", 3: "#CD7F32"}
+    
+    emoji = pos_emoji.get(int(row['posizione']), "")
+    border = border_colors.get(int(row['posizione']), "#888888")
+    
+    data_str = ""
+    if pd.notna(row['data_record']):
+        try:
+            data_obj = pd.to_datetime(row['data_record'])
+            data_str = f" &nbsp;·&nbsp; {data_obj.strftime('%d/%m/%Y')}"
+        except:
+            pass
+    
+    luogo_str = ""
+    if pd.notna(row['luogo']) and str(row['luogo']).strip():
+        luogo_str = f"<br/><span style='font-size:0.85em; color:#aaaaaa;'>📍 {row['luogo']}</span>"
+    
+    anno_str = f" <span style='color:#aaaaaa;'>({int(row['anno_nascita'])})</span>" \
+               if pd.notna(row['anno_nascita']) else ""
+    
+    return f"""
+    <div style="
+        background-color: #1e2a3a;
+        color: #f0f0f0;
+        padding: 0.8rem 1rem;
+        border-radius: 0.5rem;
+        margin-bottom: 0.7rem;
+        border-left: 5px solid {border};
+        font-family: sans-serif;
+        line-height: 1.5;
+    ">
+        <span style="font-size:1.2em;">{emoji}</span>
+        <strong style="color:#ffffff; font-size:1.05em;"> {row['tempo_formattato']}</strong>
+        <span style="color:#cccccc;"> — {row['cognome']} {row['nome']}{anno_str}{data_str}</span>
+        {luogo_str}
+    </div>
+    """
+  # funzione vera e propria
 def sezione_record_top3():
     """Visualizza i top 3 record per ogni gara"""
     st.markdown('<div class="main-header">🏆 Record Societari Top 3</div>', unsafe_allow_html=True)
