@@ -1269,28 +1269,7 @@ def sezione_record_top3():
                                     st.info("Nessun record disponibile")
                                 else:
                                     for idx, row in df.iterrows():
-                                        pos_emoji = {1: "🥇", 2: "🥈", 3: "🥉"}
-                                        emoji = pos_emoji.get(int(row['posizione']), "")
-                                        
-                                        data_str = ""
-                                        if pd.notna(row['data_record']):
-                                            try:
-                                                data_obj = pd.to_datetime(row['data_record'])
-                                                data_str = f" - {data_obj.strftime('%d/%m/%Y')}"
-                                            except:
-                                                pass
-                                        
-                                        luogo_str = ""
-                                        if pd.notna(row['luogo']) and row['luogo'].strip():
-                                            luogo_str = f"<br/>📍 {row['luogo']}"
-                                        
-                                        anno_str = f" ({row['anno_nascita']})" if pd.notna(row['anno_nascita']) else ""
-                                        
-                                        st.markdown(f"""
-                                        <div style="background-color: #f8f9fa; padding: 0.8rem; border-radius: 0.5rem; margin-bottom: 0.8rem; border-left: 4px solid {'#FFD700' if row['posizione']==1 else '#C0C0C0' if row['posizione']==2 else '#CD7F32'};">
-                                            <strong>{emoji} {row['tempo_formattato']}</strong> - {row['cognome']} {row['nome']}{anno_str}{data_str}{luogo_str}
-                                        </div>
-                                        """, unsafe_allow_html=True)
+                                        st.markdown(render_record_card(row), unsafe_allow_html=True)
                                 
                                 st.markdown("---")
         
@@ -1321,28 +1300,7 @@ def sezione_record_top3():
                                     st.info("Nessun record disponibile")
                                 else:
                                     for idx, row in df.iterrows():
-                                        pos_emoji = {1: "🥇", 2: "🥈", 3: "🥉"}
-                                        emoji = pos_emoji.get(int(row['posizione']), "")
-                                        
-                                        data_str = ""
-                                        if pd.notna(row['data_record']):
-                                            try:
-                                                data_obj = pd.to_datetime(row['data_record'])
-                                                data_str = f" - {data_obj.strftime('%d/%m/%Y')}"
-                                            except:
-                                                pass
-                                        
-                                        luogo_str = ""
-                                        if pd.notna(row['luogo']) and row['luogo'].strip():
-                                            luogo_str = f"<br/>📍 {row['luogo']}"
-                                        
-                                        anno_str = f" ({row['anno_nascita']})" if pd.notna(row['anno_nascita']) else ""
-                                        
-                                        st.markdown(f"""
-                                        <div style="background-color: #f8f9fa; padding: 0.8rem; border-radius: 0.5rem; margin-bottom: 0.8rem; border-left: 4px solid {'#FFD700' if row['posizione']==1 else '#C0C0C0' if row['posizione']==2 else '#CD7F32'};">
-                                            <strong>{emoji} {row['tempo_formattato']}</strong> - {row['cognome']} {row['nome']}{anno_str}{data_str}{luogo_str}
-                                        </div>
-                                        """, unsafe_allow_html=True)
+                                        st.markdown(render_record_card(row), unsafe_allow_html=True)
                                 
                                 st.markdown("---")
     
