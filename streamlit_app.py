@@ -154,7 +154,8 @@ def carica_record_top3() -> Dict[str, Dict[str, pd.DataFrame]]:
         g.descrizione AS gara,
         d.metri AS distanza,
         sn.codice AS stile,
-        rp.tipo_vasca,
+        tv.codice AS tipo_vasca,
+        tv.descrizione AS vasca_descrizione,
         a.cognome,
         a.nome,
         a.anno_nascita,
@@ -163,42 +164,46 @@ def carica_record_top3() -> Dict[str, Dict[str, pd.DataFrame]]:
         rp.data_record,
         rp.luogo,
         rp.manifestazione,
-        ROW_NUMBER() OVER (PARTITION BY g.id, rp.tipo_vasca ORDER BY rp.tempo_secondi ASC) AS posizione
+        ROW_NUMBER() OVER (PARTITION BY g.id, rp.tipo_vasca_id ORDER BY rp.tempo_secondi ASC) AS posizione
     FROM record_personali rp
     JOIN atleti a ON rp.atleta_id = a.id
     JOIN gare g ON rp.gara_id = g.id
     JOIN stili_nuoto sn ON g.stile_id = sn.id
     JOIN distanze d ON g.distanza_id = d.id
+    JOIN tipi_vasca tv ON rp.tipo_vasca_id = tv.id
     WHERE rp.tempo_secondi IS NOT NULL
-    ORDER BY d.metri, sn.codice, rp.tipo_vasca, posizione
+    ORDER BY d.metri, sn.codice, tv.codice, posizione
     """
     
     cur.execute(query)
     results = cur.fetchall()
     cur.close()
     
+    if not results:
+        return {'Vasca Lunga (50m)': {}, 'Vasca Corta (25m)': {}}
+    
     df_all = pd.DataFrame(results)
     
     # Filtra solo i top 3
     df_top3 = df_all[df_all['posizione'] <= 3].copy()
     
-    # Dividi per tipo vasca
     record_dict = {
         'Vasca Lunga (50m)': {},
         'Vasca Corta (25m)': {}
     }
     
-    for vasca_tipo in ['50m', '25m']:
-        df_vasca = df_top3[df_top3['tipo_vasca'] == vasca_tipo].copy()
+    # Mappa codice vasca -> chiave dizionario
+    vasca_map = {'VL': 'Vasca Lunga (50m)', 'VC': 'Vasca Corta (25m)'}
+    
+    for codice_vasca, chiave in vasca_map.items():
+        df_vasca = df_top3[df_top3['tipo_vasca'] == codice_vasca].copy()
         
-        # Raggruppa per gara
         for gara in df_vasca['gara'].unique():
-            df_gara = df_vasca[df_vasca['gara'] == gara].copy()
-            df_gara = df_gara[['posizione', 'cognome', 'nome', 'anno_nascita', 
-                              'tempo_formattato', 'data_record', 'luogo', 'manifestazione']]
-            
-            key = 'Vasca Lunga (50m)' if vasca_tipo == '50m' else 'Vasca Corta (25m)'
-            record_dict[key][gara] = df_gara
+            df_gara = df_vasca[df_vasca['gara'] == gara][
+                ['posizione', 'cognome', 'nome', 'anno_nascita',
+                 'tempo_formattato', 'data_record', 'luogo', 'manifestazione']
+            ].copy()
+            record_dict[chiave][gara] = df_gara
     
     return record_dict
 
