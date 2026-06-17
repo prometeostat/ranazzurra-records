@@ -440,7 +440,7 @@
           "manifestazione": "2° Trofeo Città di Monastier"
         },
         {
-          "posizione": 3,
+          "posizione": 2,
           "cognome": "Pasquali",
           "nome": "Andrea",
           "anno_nascita": 2011,
@@ -448,6 +448,16 @@
           "data": "14/06/2026",
           "luogo": "Verona",
           "manifestazione": ""
+        },
+        {
+          "posizione": 3,
+          "cognome": "Mantese",
+          "nome": "Pietro",
+          "anno_nascita": 2010,
+          "tempo": "0:31.61",
+          "data": "08/06/2025",
+          "luogo": "Verona",
+          "manifestazione": "10° Trofeo Alberto Castagnetti giovani"
         }
       ],
       "femminile": [
@@ -2398,5 +2408,5 @@
       ]
     }
   ],
-  "aggiornato": "17/06/2026 09:52"
+  "aggiornato": "17/06/2026 11:13"
 }

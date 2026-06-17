@@ -57,18 +57,18 @@ SELECT
     rp.data_record,
     rp.luogo,
     rp.manifestazione,
-    ROW_NUMBER() OVER (
+     DENSE_RANK() OVER (
         PARTITION BY g.id, rp.tipo_vasca_id, a.sesso
         ORDER BY rp.tempo_secondi ASC
     ) AS posizione
-FROM record_personali rp
-JOIN atleti        a  ON rp.atleta_id     = a.id
-JOIN gare          g  ON rp.gara_id       = g.id
-JOIN stili_nuoto   sn ON g.stile_id       = sn.id
-JOIN distanze      d  ON g.distanza_id    = d.id
-JOIN tipi_vasca    tv ON rp.tipo_vasca_id = tv.id
-WHERE rp.tempo_secondi IS NOT NULL
-  AND a.sesso IN ('M', 'F')
+        FROM record_personali rp
+        JOIN atleti        a  ON rp.atleta_id     = a.id
+        JOIN gare          g  ON rp.gara_id       = g.id
+        JOIN stili_nuoto   sn ON g.stile_id       = sn.id
+        JOIN distanze      d  ON g.distanza_id    = d.id
+        JOIN tipi_vasca    tv ON rp.tipo_vasca_id = tv.id
+        WHERE rp.tempo_secondi IS NOT NULL
+        AND a.sesso IN ('M', 'F')
 ORDER BY d.metri, sn.codice, tv.codice, a.sesso, posizione
 """
 
