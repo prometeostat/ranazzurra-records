@@ -1,6 +1,25 @@
-﻿*.pem
-ca.pem
-.streamlit/
-*.xlsx
-calcola_*.py
+# Credenziali: mai nel repository
+.streamlit/secrets.toml
+*.secret.json
+service_account*.json
 db.txt
+
+# Il certificato CA di Aiven e' pubblico e serve all'app su Streamlit Cloud
+*.pem
+!ca.pem
+
+# File generati e dati personali
+records.json
+*.xlsx
+*.csv
+tests/fixtures_privati/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Backup locali delle migrazioni (contengono dati personali)
+backup/

@@ -1,90 +1,52 @@
-# 🚨 FIX URGENTE - Ranazzurra Records App Crashata
+# Ranazzurra Records
 
-## Il Problema
+Gestione dei record societari della **squadra agonistica di categoria** di Ranazzurra Conegliano SSD: anagrafica atleti, personali, classifica dei record (i primi 3 tempi per gara, vasca e sesso) e importazione dei risultati dai PDF pubblicati dalla FIN.
 
-L'app crasha **SEMPRE** con questo errore:
-```
-malloc(): unsorted double linked list corrupted
-```
+L'applicazione e' una app Streamlit su Streamlit Community Cloud con database MySQL su Aiven. La pagina pubblica `record_societari.html` del sito della societa' legge il file `records.json` generato da `esporta_records.py`.
 
-**CAUSA**: Streamlit Cloud sta usando Python 3.14.5 (uscito da pochi giorni) che è:
-- ❌ Troppo nuovo e instabile
-- ❌ Incompatibile con molte librerie
-- ❌ Causa crash di memoria a livello C
+Il progetto Master Conegliano (app `ranazzurra_streamlit`, database PostgreSQL) e' un'altra cosa e vive in un altro repository.
 
-## ✅ Soluzione Definitiva
+## Funzionalita'
 
-### File da Sostituire/Aggiungere nel Repository GitHub:
+- **Dashboard**: numeri principali, record societari, podio e progressione di una gara, ultimi personali e ultime importazioni.
+- **Record Top 3**: la stessa classifica pubblicata sul sito, ex aequo compresi, con il download di `records.json`.
+- **Gestione atleti** e **Gestione record** (personali): inserimento, modifica, disattivazione. Un tempo piu' lento non sostituisce mai un personale, salvo correzione esplicita.
+- **Importa risultati FIN**: lettura del PDF da Google Drive o dal computer, riconoscimento degli atleti, confronto con lo storico, anteprima con nuovi record e primati personali, conferma esplicita, storico delle importazioni.
 
-1. **streamlit_app_FIXED.py** → rinominalo in **streamlit_app.py**
-   - Include la nuova sezione "🏆 Record Top 3"
-   - Query SQL corretta
+## Avvio in locale
 
-2. **requirements.txt** (SOSTITUISCI)
-   ```txt
-   streamlit==1.39.0
-   pandas==2.2.3
-   numpy==1.26.4
-   mysql-connector-python==9.1.0
-   plotly==5.24.1
-   ```
+Serve Python 3.11 (la versione di Streamlit Cloud, vedi `runtime.txt`).
 
-3. **runtime.txt** (NUOVO FILE - aggiungi nella root)
-   ```txt
-   python-3.11.9
-   ```
-
-### 🔧 Passi per il Deploy:
-
-1. Nel repository GitHub `ranazzurra-records`:
-   ```bash
-   # Sostituisci
-   git add streamlit_app.py
-   git add requirements.txt
-   
-   # NUOVO file (importantissimo!)
-   git add runtime.txt
-   
-   git commit -m "Fix crash Python 3.14 + add Record Top 3"
-   git push
-   ```
-
-2. Vai su **Streamlit Cloud Dashboard**
-3. Trova l'app `ranazzurra-records`
-4. Clicca su **"⋮"** → **"Reboot app"** (riavvio forzato)
-5. Aspetta il deploy (2-3 minuti)
-
-### Perché runtime.txt invece di .python-version?
-
-Streamlit Cloud dà **priorità** a `runtime.txt` per specificare la versione Python.
-Il formato è: `python-X.Y.Z` (es. `python-3.11.9`)
-
-## 📊 Cosa Include la Nuova Versione
-
-✅ Sezione **"🏆 Record Top 3"** nel menu principale
-- Top 3 tempi per ogni gara (18 gare totali)
-- Diviso tra Vasca Lunga (50m) e Vasca Corta (25m)  
-- Layout pulito a 2 colonne
-- Medaglie 🥇🥈🥉
-- Visualizzazione senza filtri dinamici (come richiesto)
-
-## ⚠️ Se Continua a Non Funzionare
-
-Se dopo il reboot continua a crashare:
-
-1. **Elimina completamente l'app** da Streamlit Cloud
-2. **Ricrea l'app da zero** collegando il repo GitHub
-3. Streamlit rileggerà `runtime.txt` e userà Python 3.11
-
-## 🎯 Versioni Testate e Funzionanti
-
-```
-Python: 3.11.9 (STABILE)
-Streamlit: 1.39.0
-Pandas: 2.2.3
-NumPy: 1.26.4
-MySQL Connector: 9.1.0
-Plotly: 5.24.1
+```bash
+python -m venv .venv
+source .venv/bin/activate            # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+cp .streamlit/secrets.toml.example .streamlit/secrets.toml   # e compilalo
+streamlit run streamlit_app.py
 ```
 
-Queste versioni sono **testate e stabili** su Python 3.11.
+`.streamlit/secrets.toml` contiene le credenziali e non va mai nel repository (e' in `.gitignore`). Le sezioni sono descritte nell'esempio e in [docs/deployment.md](docs/deployment.md).
+
+## Operazioni ricorrenti
+
+| Cosa | Come |
+|---|---|
+| Aggiornare lo schema del database | `python -m ranazzurra_records.migrazioni --applica` (fa prima un backup) |
+| Importare i risultati di una gara | pagina *Importa risultati FIN*, vedi [docs/fin-results-import.md](docs/fin-results-import.md) |
+| Pubblicare i record sul sito | `python esporta_records.py` (genera `records.json` e lo carica via FTP) |
+| Lanciare i test | `pip install -r requirements-dev.txt` e poi `python -m pytest` |
+
+## Documentazione
+
+| Documento | Contenuto |
+|---|---|
+| [CLAUDE.md](CLAUDE.md) | regole operative per chi lavora sul codice (persone e Claude) |
+| [docs/architecture.md](docs/architecture.md) | componenti, moduli, flussi |
+| [docs/database.md](docs/database.md) | tabelle, vincoli, migrazioni, backup |
+| [docs/records-management.md](docs/records-management.md) | regole dei personali e dei record societari |
+| [docs/fin-results-import.md](docs/fin-results-import.md) | procedura di importazione dei PDF FIN |
+| [docs/google-drive-integration.md](docs/google-drive-integration.md) | configurazione dell'accesso a Google Drive |
+| [docs/development-guide.md](docs/development-guide.md) | ambiente di sviluppo, test, convenzioni |
+| [docs/deployment.md](docs/deployment.md) | Streamlit Cloud, Aiven, secrets, pubblicazione sul sito |
+| [docs/project-status.md](docs/project-status.md) | stato attuale, problemi noti, prossimi passi |
+| [docs/decisions/](docs/decisions/) | decisioni architetturali (ADR) |
