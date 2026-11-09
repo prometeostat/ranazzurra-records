@@ -20,3 +20,6 @@ __pycache__/
 .pytest_cache/
 .venv/
 venv/
+
+# Backup locali delle migrazioni (contengono dati personali)
+backup/
