@@ -54,7 +54,7 @@ def _elenco(db) -> None:
         f = f[f["anno_nascita"].isna() | f["anno_nascita"].between(*intervallo)]
     vista = pd.DataFrame({
         "Cognome": f["cognome"], "Nome": f["nome"], "Sesso": f["sesso"],
-        "Anno nascita": f["anno_nascita"], "Attivo": f["attivo"],
+        "Anno nascita": C.anni(f["anno_nascita"]), "Attivo": f["attivo"],
     })
     st.dataframe(vista, use_container_width=True, hide_index=True)
     st.caption(f"Totale: {len(f)} atleti")

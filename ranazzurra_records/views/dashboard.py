@@ -85,7 +85,7 @@ def mostra() -> None:
             "Vasca": primi["tipo_vasca"],
             "Sesso": primi["sesso"],
             "Atleta": primi["cognome"] + " " + primi["nome"],
-            "Anno": primi["anno_nascita"],
+            "Anno": C.anni(primi["anno_nascita"]),
             "Tempo": primi["tempo_formattato"],
             "Data": primi["data_record"].map(C.data_it),
             "Luogo": primi["luogo"].fillna(""),

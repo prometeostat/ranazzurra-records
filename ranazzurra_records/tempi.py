@@ -40,6 +40,8 @@ def parse_tempo(testo: str | None) -> int:
     secondi = int(m.group("s"))
     cent = m.group("c") or "0"
     centesimi = int(cent.ljust(2, "0"))
+    if m.group("m") is not None and len(m.group("s")) != 2:
+        raise TempoNonValido(f"i secondi vanno scritti con due cifre: {testo!r}")
     if (m.group("m") is not None) and secondi >= 60:
         raise TempoNonValido(f"secondi fuori scala in {testo!r}")
     if m.group("h") is not None and minuti >= 60:

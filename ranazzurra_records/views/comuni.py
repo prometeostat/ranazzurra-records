@@ -96,6 +96,12 @@ def data_it(val) -> str:
         return str(val)
 
 
+def anni(serie: pd.Series) -> pd.Series:
+    """Anni di nascita come testo: le colonne numeriche verrebbero mostrate
+    con il separatore delle migliaia (2,013)."""
+    return serie.map(lambda v: "" if v is None or pd.isna(v) else str(int(v)))
+
+
 def nome_vasca(codice: str) -> str:
     return VASCHE.get(codice, codice)
 

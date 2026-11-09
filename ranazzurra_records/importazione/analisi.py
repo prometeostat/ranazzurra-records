@@ -332,25 +332,35 @@ def _personali_per_sesso(foto: Fotografia, gara_id: int, vasca_id: int, sesso: s
 
 
 def _valuta_tutte(righe: list[RigaAnalisi], foto: Fotografia) -> None:
-    """Ogni risultato si confronta con lo stato del database prima
-    dell'importazione. Se lo stesso atleta ha piu' tempi selezionati sulla
-    stessa gara e vasca (batterie e finale), conta il migliore."""
-    migliori: dict[tuple, RigaAnalisi] = {}
+    """Confronto con lo storico, gara per gara (gara + vasca + sesso).
+
+    Le righe selezionate si valutano dalla piu' veloce alla piu' lenta, e ogni
+    miglioramento entra subito nella classifica di lavoro: cosi' se due nostri
+    atleti battono lo stesso record, il primo e' "nuovo record" e il secondo
+    entra in top 3; e se lo stesso atleta ha due tempi (batterie e finale)
+    conta il migliore, l'altro risulta senza miglioramento. Le righe non
+    selezionate si valutano dopo, senza toccare la classifica."""
+    gruppi: dict[tuple, list[RigaAnalisi]] = defaultdict(list)
     for ra in righe:
-        if ra.stato != IMPORTABILE or ra.atleta_id is None:
-            continue
-        base = _personali_per_sesso(foto, ra.gara_id, ra.vasca_id, ra.sesso)
-        ra.valutazione = valuta(ra.atleta_id, ra.riga.tempo if ra.riga.stato == "OK" else None, base)
-        if ra.selezionata and ra.riga.stato == "OK":
-            k = (ra.atleta_id, ra.gara_id, ra.vasca_id)
-            if k not in migliori or ra.riga.tempo < migliori[k].riga.tempo:
-                migliori[k] = ra
-    for ra in righe:
-        if (ra.valutazione and ra.valutazione.esito.aggiorna_pb and ra.selezionata
-                and migliori.get((ra.atleta_id, ra.gara_id, ra.vasca_id)) is not ra):
-            ra.valutazione = Valutazione(Esito.NESSUNO, ra.valutazione.pb_precedente,
-                                         ra.valutazione.record_precedente,
-                                         note=["nella stessa importazione c'e' un tempo migliore"])
+        if ra.stato == IMPORTABILE and ra.atleta_id is not None:
+            gruppi[(ra.gara_id, ra.vasca_id, ra.sesso)].append(ra)
+
+    def ordine(ra: RigaAnalisi):
+        t = ra.riga.tempo if ra.riga.stato == "OK" and ra.riga.tempo else 10 ** 9
+        return (not ra.selezionata, t)
+
+    for (gara_id, vasca_id, sesso), gruppo in gruppi.items():
+        base = _personali_per_sesso(foto, gara_id, vasca_id, sesso)
+        da_questa_importazione: set[int] = set()
+        for ra in sorted(gruppo, key=ordine):
+            t = ra.riga.tempo if ra.riga.stato == "OK" else None
+            v = valuta(ra.atleta_id, t, base)
+            if v.esito == Esito.NESSUNO and ra.atleta_id in da_questa_importazione:
+                v.note.append("nella stessa importazione c'e' un tempo migliore")
+            ra.valutazione = v
+            if ra.selezionata and v.esito.aggiorna_pb:
+                base = {**base, ra.atleta_id: t}
+                da_questa_importazione.add(ra.atleta_id)
 
 
 def _top3_prima_dopo(righe: list[RigaAnalisi], foto: Fotografia) -> dict:

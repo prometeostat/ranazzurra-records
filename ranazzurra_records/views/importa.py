@@ -162,10 +162,12 @@ def _atleti(an, dec: Decisioni) -> None:
 
     # problemi prima, poi gli associati automaticamente (correggibili)
     voci = sorted(an.atleti_pdf.items(), key=lambda kv: (kv[1].livello == Livello.CERTO, kv[0]))
-    da_vedere = sum(1 for _, r in voci if r.livello != Livello.CERTO)
-    titolo = (f"👥 Atleti da verificare: {da_vedere}" if da_vedere else
-              "👥 Atleti: tutti riconosciuti automaticamente")
-    with st.expander(titolo + f" (su {len(voci)})", expanded=bool(da_vedere)):
+    da_vedere = len(an.atleti_da_risolvere)
+    decisi = sum(1 for k, r in voci if r.livello != Livello.CERTO and k in dec.associazioni)
+    titolo = (f"👥 Atleti da verificare: {da_vedere}" if da_vedere else "👥 Atleti: nessuno da verificare")
+    if decisi:
+        titolo += f" · scelte fatte: {decisi}"
+    with st.expander(titolo + f" (su {len(voci)} nel PDF)", expanded=bool(da_vedere)):
         st.caption("Le associazioni automatiche valgono solo con nome e anno identici. Per gli altri "
                    "scegli l'atleta giusto, crealo o escludi le sue righe, poi premi Applica. "
                    "'Ricorda' salva la grafia del PDF per le prossime importazioni.")
@@ -186,12 +188,12 @@ def _atleti(an, dec: Decisioni) -> None:
             cognome, nome_p = (n.cognome, n.nome) if n else proponi_cognome_nome(nome)
             righe.append({
                 "Nel PDF": nome, "Anno": int(anno),
-                "Riconoscimento": rec.livello.value + (f": {rec.motivo}" if rec.livello != Livello.CERTO else ""),
-                "Proposte": "; ".join(f"{c.atleta.etichetta} ({c.punteggio:.0%})" for c in rec.candidati),
                 "Azione": azione,
+                "Proposte": "; ".join(f"{c.atleta.etichetta} ({c.punteggio:.0%})" for c in rec.candidati),
                 "Cognome (se nuovo)": cognome, "Nome (se nuovo)": nome_p,
                 "Sesso (se nuovo)": (n.sesso if n else (gara_sesso if gara_sesso in ("M", "F") else None)),
                 "Ricorda": k in dec.ricorda,
+                "Riconoscimento": rec.livello.value + (f": {rec.motivo}" if rec.livello != Livello.CERTO else ""),
                 "_k": k,
             })
         df = pd.DataFrame(righe)
@@ -201,6 +203,8 @@ def _atleti(an, dec: Decisioni) -> None:
             use_container_width=True,
             disabled=["Nel PDF", "Anno", "Riconoscimento", "Proposte"],
             column_config={
+                "Anno": st.column_config.NumberColumn(format="%d"),
+                "Proposte": st.column_config.TextColumn(width="medium"),
                 "Azione": st.column_config.SelectboxColumn(options=opzioni, required=True, width="large"),
                 "Sesso (se nuovo)": st.column_config.SelectboxColumn(options=["M", "F"]),
                 "Ricorda": st.column_config.CheckboxColumn(help="Salva questa grafia come alias dell'atleta scelto"),
