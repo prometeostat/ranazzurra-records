@@ -1,5 +1,13 @@
--- Schema Database per Record Societari Ranazzurra S.r.l.
--- MySQL/MariaDB Schema per AIVEN
+-- Schema base del database Record Societari Ranazzurra (MySQL 8.4 su Aiven)
+--
+-- ATTENZIONE: questo script crea lo schema DA ZERO e comincia con DROP TABLE.
+-- NON eseguirlo mai sul database di produzione: cancellerebbe tutti i dati.
+-- Serve solo per ricreare un database di sviluppo o di test; dopo questo
+-- vanno applicate in ordine le migrazioni di db/migrations/.
+--
+-- La tabella record_societari e la procedura aggiorna_record_societari sono
+-- dismesse (vedi docs/decisions/ADR-002-record-come-classifica.md): restano
+-- qui per fedelta' allo schema di produzione, l'applicazione non le usa piu'.
 
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
