@@ -216,7 +216,12 @@ INSERT INTO risultati
      tempo_secondi, tempo_formattato, stato, posizione, cronometraggio,
      titolo_gara, pagina_pdf, esito, importazione_id)
 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-ON DUPLICATE KEY UPDATE id = id
+"""
+
+RISULTATO_ESISTE = """
+SELECT id FROM risultati
+WHERE manifestazione_id = %s AND atleta_id = %s AND gara_id = %s AND tipo_vasca_id = %s AND turno = %s
+FOR UPDATE
 """
 
 ALIAS_TUTTI = "SELECT alias_normalizzato, anno_nascita, atleta_id FROM atleti_alias"

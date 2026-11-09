@@ -14,7 +14,7 @@ from mysql.connector import Error as MySQLError
 
 from ranazzurra_records import __version__
 from ranazzurra_records.config import ConfigurazioneMancante
-from ranazzurra_records.views import atleti, comuni, dashboard, personali, top3
+from ranazzurra_records.views import atleti, comuni, dashboard, importa, personali, top3
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -31,6 +31,7 @@ PAGINE = {
     "🏆 Record Top 3": top3.mostra,
     "👤 Gestione Atleti": atleti.mostra,
     "🏅 Gestione Record": personali.mostra,
+    "📥 Importa risultati FIN": importa.mostra,
 }
 
 
